@@ -228,6 +228,7 @@ def verifier_node(state: AgentState, usage_tracker: UsageTracker | None = None) 
     _track_usage(state, "verifier", response, usage_tracker)
 
     verification_result = response.content
+    print(f"{verification_result=}")
     passed = "PASS" in verification_result.upper().split("\n")[0]
 
     state["verification_passed"] = passed

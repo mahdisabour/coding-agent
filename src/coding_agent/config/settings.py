@@ -51,10 +51,6 @@ class Settings(BaseSettings):
         description="Automatically save session after each turn",
     )
 
-    # MCP Server Configuration
-    mcp_host: str = Field(default="localhost", description="MCP server host")
-    mcp_port: int = Field(default=8000, ge=1024, le=65535, description="MCP server port")
-
     # Logging
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO")
     log_file: Path | None = Field(default=None, description="Log file path")

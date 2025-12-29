@@ -407,21 +407,6 @@ Test on SWE-bench Lite subset:
 coding-agent evaluate --limit 5 --output quick_eval.json
 ```
 
-## 🔌 MCP Server (Advanced)
-
-The agent's tools are exposed via MCP (Model Context Protocol):
-
-```bash
-# Start MCP server
-mcp-server
-```
-
-Available tools:
-- `read_file`, `create_file`, `update_file`
-- `list_directory`, `search_files`
-- `run_command`
-- `search_code`, `search_symbols`
-
 ## 🗂️ Project Structure
 
 ```
@@ -429,7 +414,6 @@ coding_agent/
 ├── src/coding_agent/       # Main package
 │   ├── agent/              # LangGraph workflow + session management
 │   ├── tools/              # Agent tools (file ops, search, shell)
-│   ├── mcp/                # MCP server
 │   ├── evaluation/         # SWE-bench benchmarking
 │   ├── cli/                # CLI + interactive interface
 │   ├── config/             # Settings management
@@ -603,9 +587,6 @@ coding-agent solve "TASK" --project-root PATH
 
 # Evaluation
 coding-agent evaluate --limit N
-
-# MCP server
-mcp-server
 
 # Tests
 pytest tests/

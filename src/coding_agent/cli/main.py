@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 @click.group()
 @click.version_option(version="0.1.0")
 def cli():
-    """Professional CLI-based coding agent with LangGraph and MCP support.
+    """Professional CLI-based coding agent with LangGraph.
 
     Run 'coding-agent chat' to start an interactive session (recommended).
     """
@@ -279,7 +279,6 @@ def version():
     console.print("[bold cyan]Coding Agent[/bold cyan] version 0.1.0")
     console.print("\nA professional CLI-based coding agent with:")
     console.print("  - LangGraph workflow")
-    console.print("  - MCP server integration")
     console.print("  - SWE-bench evaluation support")
     console.print("  - Usage and cost tracking")
 

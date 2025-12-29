@@ -1,6 +1,6 @@
 # Coding Agent
 
-A professional CLI-based coding agent powered by LangGraph, featuring **interactive multi-turn conversations**, MCP (Model Context Protocol) server integration, SWE-bench evaluation support, and comprehensive usage tracking.
+A professional CLI-based coding agent powered by LangGraph, featuring **interactive multi-turn conversations**, SWE-bench evaluation support, and comprehensive usage tracking.
 
 ## Quick Start
 
@@ -19,7 +19,6 @@ coding-agent solve "Add error handling to auth.py" --project-root ./your-project
 - **💾 Session Management**: Save and resume work at any time
 - **📊 Real-Time Cost Tracking**: Monitor token usage and costs per turn and cumulatively
 - **🏗️ Modular Agent Architecture**: Built with LangGraph featuring distinct nodes for planning, execution, verification, and reflection
-- **🔌 MCP Server Integration**: Tools exposed via Model Context Protocol for standardized access
 - **🛠️ Rich Tool Set**: File operations, code search, symbol lookup, and shell command execution
 - **📈 SWE-bench Evaluation**: Built-in support for benchmarking on SWE-bench Lite dataset
 - **💰 Usage & Cost Tracking**: Detailed token usage and cost estimation per node and overall
@@ -238,53 +237,31 @@ Full evaluation with custom output:
 coding-agent evaluate --split test --output results/eval_run1.json
 ```
 
-### MCP Server
-
-Start the MCP server to expose tools:
-
-```bash
-mcp-server
-```
-
-The server exposes the following tools:
-- `read_file`: Read file contents
-- `create_file`: Create new files
-- `update_file`: Update existing files
-- `list_directory`: List directory contents
-- `search_files`: Find files by pattern
-- `run_command`: Execute shell commands
-- `search_code`: Search code by pattern
-- `search_symbols`: Find function/class definitions
-
 ## Project Structure
 
 ```
 coding_agent/
 ├── src/
-│   ├── coding_agent/
-│   │   ├── agent/              # LangGraph workflow
-│   │   │   ├── graph.py        # Workflow definition
-│   │   │   ├── nodes.py        # Agent nodes
-│   │   │   ├── state.py        # State management
-│   │   │   └── prompts.py      # System prompts
-│   │   ├── tools/              # Agent tools
-│   │   │   ├── file_ops.py     # File operations
-│   │   │   ├── shell.py        # Shell commands
-│   │   │   └── search.py       # Code search
-│   │   ├── mcp/                # MCP server
-│   │   │   └── server.py       # Server implementation
-│   │   ├── evaluation/         # Benchmarking
-│   │   │   ├── runner.py       # Evaluation runner
-│   │   │   └── metrics.py      # Metrics calculation
-│   │   ├── cli/                # CLI interface
-│   │   │   └── main.py         # Command-line interface
-│   │   ├── config/             # Configuration
-│   │   │   └── settings.py     # Settings management
-│   │   └── utils/              # Utilities
-│   │       ├── logging.py      # Logging setup
-│   │       └── usage_tracker.py # Token tracking
-│   └── mcp_server/
-│       └── main.py             # MCP server entry
+│   └── coding_agent/
+│       ├── agent/              # LangGraph workflow
+│       │   ├── graph.py        # Workflow definition
+│       │   ├── nodes.py        # Agent nodes
+│       │   ├── state.py        # State management
+│       │   └── prompts.py      # System prompts
+│       ├── tools/              # Agent tools
+│       │   ├── file_ops.py     # File operations
+│       │   ├── shell.py        # Shell commands
+│       │   └── search.py       # Code search
+│       ├── evaluation/         # Benchmarking
+│       │   ├── runner.py       # Evaluation runner
+│       │   └── metrics.py      # Metrics calculation
+│       ├── cli/                # CLI interface
+│       │   └── main.py         # Command-line interface
+│       ├── config/             # Configuration
+│       │   └── settings.py     # Settings management
+│       └── utils/              # Utilities
+│           ├── logging.py      # Logging setup
+│           └── usage_tracker.py # Token tracking
 ├── tests/                      # Test suite
 ├── configs/                    # Configuration files
 ├── pyproject.toml              # Project metadata
@@ -375,8 +352,7 @@ ruff check .
 
 1. Create tool function in `src/coding_agent/tools/`
 2. Add `@tool` decorator
-3. Register in `src/coding_agent/mcp/server.py`
-4. Update agent nodes to include the tool
+3. Update agent nodes to include the tool
 
 Example:
 
@@ -481,5 +457,4 @@ If you use this agent in your research, please cite:
 ## Acknowledgments
 
 - Built with [LangGraph](https://github.com/langchain-ai/langgraph)
-- MCP protocol support
 - Evaluated on [SWE-bench](https://www.swebench.com/)

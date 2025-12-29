@@ -1,7 +1,7 @@
 [project]
 name = "coding-agent"
 version = "0.1.0"
-description = "A professional CLI-based coding agent with LangGraph and MCP support"
+description = "A professional CLI-based coding agent with LangGraph"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -19,7 +19,6 @@ dependencies = [
     "tiktoken>=0.7.0",
     "gitpython>=3.1.40",
     "httpx>=0.27.0",
-    "mcp>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -31,14 +30,13 @@ dev = [
 
 [project.scripts]
 coding-agent = "coding_agent.cli.main:cli"
-mcp-server = "mcp_server.main:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/coding_agent", "src/mcp_server"]
+packages = ["src/coding_agent"]
 
 [tool.ruff]
 line-length = 100
