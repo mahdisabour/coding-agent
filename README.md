@@ -1,6 +1,6 @@
 # Coding Agent
 
-A professional CLI-based coding agent powered by LangGraph, featuring **interactive multi-turn conversations**, SWE-bench evaluation support, and comprehensive usage tracking.
+A professional CLI-based coding agent powered by LangGraph ReAct loop, featuring **interactive multi-turn conversations** with memory and comprehensive usage tracking.
 
 ## Quick Start
 
@@ -14,83 +14,25 @@ coding-agent solve "Add error handling to auth.py" --project-root ./your-project
 
 ## Features
 
-- **🎯 Interactive Multi-Turn Mode**: Have natural conversations with context memory across turns
+- **🎯 Interactive Multi-Turn Mode**: Natural conversations with full context memory
 - **🧠 Conversation Memory**: Agent remembers previous interactions and builds on context
 - **💾 Session Management**: Save and resume work at any time
-- **📊 Real-Time Cost Tracking**: Monitor token usage and costs per turn and cumulatively
-- **🏗️ Modular Agent Architecture**: Built with LangGraph featuring distinct nodes for planning, execution, verification, and reflection
+- **🤖 ReAct Loop**: Reasoning and acting cycle for autonomous problem-solving
 - **🛠️ Rich Tool Set**: File operations, code search, symbol lookup, and shell command execution
-- **📈 SWE-bench Evaluation**: Built-in support for benchmarking on SWE-bench Lite dataset
-- **💰 Usage & Cost Tracking**: Detailed token usage and cost estimation per node and overall
+- **💰 Session-Level Token Tracking**: Monitor total token usage and costs after completion
 - **🔗 OpenAI-Compatible**: Works with OpenAI API and compatible providers
-- **✨ Professional CLI**: Rich terminal interface with progress tracking and formatted output
-
-## Two Modes of Operation
-
-### Interactive Mode (Recommended)
-
-Multi-turn conversations with context memory - ideal for complex projects:
-
-```bash
-coding-agent chat --project-root ./my-project
-```
-
-**Benefits:**
-- Context preserved across turns
-- Build solutions iteratively
-- Track costs across entire session
-- Save and resume sessions
-- Natural conversation flow
-
-See [INTERACTIVE_MODE.md](INTERACTIVE_MODE.md) for detailed guide.
-
-### Single-Turn Mode
-
-One-shot task execution - ideal for quick fixes:
-
-```bash
-coding-agent solve "Fix typo in README" --project-root .
-```
+- **✨ Professional CLI**: Rich terminal interface with progress tracking
 
 ## Architecture
 
-The agent follows a structured workflow:
+The agent uses a **ReAct (Reasoning + Acting) loop** powered by LangChain's `create_agent`:
 
-1. **Plan**: Analyzes the task and creates an execution strategy
-2. **Execute**: Uses available tools to implement the plan
-3. **Verify**: Validates the solution meets requirements
-4. **Reflect**: (Optional) Analyzes failures and refines approach for next iteration
+1. **Reason**: Agent analyzes the task and decides which tool to use
+2. **Act**: Execute the chosen tool with appropriate parameters
+3. **Observe**: Process tool results and update understanding
+4. **Repeat**: Continue until task is complete
 
-### Agent Nodes
-
-```
-┌─────────┐
-│  Start  │
-└────┬────┘
-     │
-     ▼
-┌─────────┐
-│  Plan   │  - Analyze task
-└────┬────┘  - Create strategy
-     │
-     ▼
-┌─────────┐
-│ Execute │  - Use tools
-└────┬────┘  - Implement solution
-     │
-     ▼
-┌─────────┐
-│ Verify  │  - Check correctness
-└────┬────┘  - Validate quality
-     │
-     ├─ Pass ──────────────┐
-     │                     ▼
-     └─ Fail ──▶ ┌──────────┐
-                 │ Reflect  │
-                 └────┬─────┘
-                      │
-                      └──▶ Plan (retry)
-```
+The agent autonomously selects and executes tools based on the task requirements.
 
 ## Installation
 
@@ -122,151 +64,61 @@ cp .env.example .env
 
 ## Configuration
 
-### Environment Variables
-
-Configure the agent via environment variables (`.env` file):
+Create a `.env` file in the project root:
 
 ```bash
 # Required
 CODING_AGENT_OPENAI_API_KEY=your-api-key-here
 
-# Optional (with defaults)
-CODING_AGENT_OPENAI_API_BASE=https://api.openai.com/v1
+# Optional (defaults shown)
 CODING_AGENT_MODEL_NAME=gpt-4-turbo-preview
 CODING_AGENT_TEMPERATURE=0.1
 CODING_AGENT_MAX_TOKENS=4096
-CODING_AGENT_MAX_ITERATIONS=10
-CODING_AGENT_ENABLE_REFLECTION=true
 CODING_AGENT_LOG_LEVEL=INFO
 CODING_AGENT_TRACK_USAGE=true
-```
 
-### Configuration File
-
-Alternatively, use a YAML configuration file (`configs/default.yaml`):
-
-```yaml
-model:
-  name: gpt-4-turbo-preview
-  temperature: 0.1
-  max_tokens: 4096
-
-agent:
-  max_iterations: 10
-  enable_reflection: true
-
-logging:
-  level: INFO
+# Cost estimation (USD per 1M tokens)
+CODING_AGENT_COST_PER_MILLION_INPUT_TOKENS=10.0
+CODING_AGENT_COST_PER_MILLION_OUTPUT_TOKENS=30.0
 ```
 
 ## Usage
 
 ### Interactive Chat (Recommended)
 
-Start an interactive session:
-
 ```bash
-# Basic usage
-coding-agent chat
-
-# With specific project
+# Start interactive session
 coding-agent chat --project-root /path/to/project
 
 # Load previous session
 coding-agent chat --load-session my_session.json
 ```
 
-**Within the interactive session:**
-
-```bash
-You: Create a REST API for user management
-
-Agent: [Creates API structure...]
-
-You: Add authentication with JWT
-
-Agent: [Adds JWT auth building on previous context...]
-
-You: /stats  # Check token usage and costs
-
-You: /save api_session.json  # Save your progress
-
-You: /exit
-```
-
-**Available commands in chat:**
+**Available commands:**
 - `/help` - Show commands
 - `/stats` - Session statistics
 - `/context` - Current context info
 - `/save [file]` - Save session
 - `/load <file>` - Load session
-- `/clear` - Clear context
-- `/exit` - Exit
+- `/clear` - Clear working context
+- `/reset` - Reset entire session
+- `/exit` - Exit session
 
-### Single-Turn Task (Quick Fixes)
-
-Run the agent on a specific task:
-
-```bash
-coding-agent solve "Add a function to calculate fibonacci numbers" --project-root /path/to/project
-```
-
-With verbose output:
+### Single Task Mode
 
 ```bash
-coding-agent solve "Fix the bug in auth.py" --project-root ./my-app --verbose
-```
+# Solve a specific task
+coding-agent solve "Add error handling to auth.py" --project-root .
 
-Disable usage tracking:
+# With verbose logging
+coding-agent solve "Fix bug in parser" --verbose
 
-```bash
-coding-agent solve "Refactor database queries" --no-tracking
-```
-
-### Run Evaluations
-
-Evaluate on SWE-bench Lite:
-
-```bash
-coding-agent evaluate --dataset "SWE-bench/SWE-bench_Lite" --limit 10
-```
-
-Full evaluation with custom output:
-
-```bash
-coding-agent evaluate --split test --output results/eval_run1.json
+# Disable token tracking
+coding-agent solve "Refactor code" --no-tracking
 ```
 
 ## Project Structure
 
-```
-coding_agent/
-├── src/
-│   └── coding_agent/
-│       ├── agent/              # LangGraph workflow
-│       │   ├── graph.py        # Workflow definition
-│       │   ├── nodes.py        # Agent nodes
-│       │   ├── state.py        # State management
-│       │   └── prompts.py      # System prompts
-│       ├── tools/              # Agent tools
-│       │   ├── file_ops.py     # File operations
-│       │   ├── shell.py        # Shell commands
-│       │   └── search.py       # Code search
-│       ├── evaluation/         # Benchmarking
-│       │   ├── runner.py       # Evaluation runner
-│       │   └── metrics.py      # Metrics calculation
-│       ├── cli/                # CLI interface
-│       │   └── main.py         # Command-line interface
-│       ├── config/             # Configuration
-│       │   └── settings.py     # Settings management
-│       └── utils/              # Utilities
-│           ├── logging.py      # Logging setup
-│           └── usage_tracker.py # Token tracking
-├── tests/                      # Test suite
-├── configs/                    # Configuration files
-├── pyproject.toml              # Project metadata
-└── README.md                   # This file
-```
 
 ## Available Tools
 
@@ -289,172 +141,44 @@ coding_agent/
 
 ## Usage Tracking
 
-The agent tracks token usage and estimates costs for each operation:
+The agent tracks token usage and estimates costs at the **session level**:
 
+**In Interactive Mode** (`/stats` command):
 ```
-==========================================================
-USAGE SUMMARY
-==========================================================
-Total Input Tokens:  12,543
-Total Output Tokens: 3,892
-Total Tokens:        16,435
-Estimated Cost:      $0.2421
-Total Operations:    8
-
-Per-Node Breakdown:
-----------------------------------------------------------
-
-planner:
-  Calls:         2
-  Input Tokens:  4,231
-  Output Tokens: 892
-  Cost:          $0.0691
-
-executor:
-  Calls:         2
-  Input Tokens:  5,123
-  Output Tokens: 1,823
-  Cost:          $0.1060
-
-verifier:
-  Calls:         2
-  Input Tokens:  2,145
-  Output Tokens: 891
-  Cost:          $0.0488
-
-reflector:
-  Calls:         2
-  Input Tokens:  1,044
-  Output Tokens: 286
-  Cost:          $0.0182
-==========================================================
+Session Statistics
+────────────────────────────────────────
+Total Turns             5
+Total Input Tokens      12,543
+Total Output Tokens     3,892
+Total Tokens            16,435
+Total Cost              $0.2421
+Avg Cost/Turn           $0.0484
 ```
 
-## Development
-
-### Running Tests
-
-```bash
-pytest tests/
+**In Single Task Mode** (shown after completion):
+```
+============================================================
+Token Usage
+============================================================
+Input Tokens:  4,231
+Output Tokens: 892
+Total Tokens:  5,123
+Estimated Cost: $0.0691
+============================================================
 ```
 
-### Code Quality
-
-```bash
-# Format code
-ruff format .
-
-# Lint
-ruff check .
-```
-
-### Adding New Tools
-
-1. Create tool function in `src/coding_agent/tools/`
-2. Add `@tool` decorator
-3. Update agent nodes to include the tool
-
-Example:
-
-```python
-from langchain_core.tools import tool
-
-@tool
-def my_custom_tool(arg: str, project_root: str = ".") -> str:
-    """Description of what this tool does.
-
-    Args:
-        arg: Description of argument
-        project_root: Root directory
-
-    Returns:
-        Result description
-    """
-    # Implementation
-    return "result"
-```
-
-## Extending the Agent
-
-### Custom Nodes
-
-Add new nodes to the workflow by:
-
-1. Creating node function in `src/coding_agent/agent/nodes.py`
-2. Adding prompts in `src/coding_agent/agent/prompts.py`
-3. Updating graph in `src/coding_agent/agent/graph.py`
-
-### Custom Evaluation Datasets
-
-To evaluate on custom datasets:
-
-1. Ensure dataset is compatible with HuggingFace `datasets`
-2. Run: `coding-agent evaluate --dataset "your/dataset" --split test`
 
 ## API Compatibility
 
-The agent uses OpenAI-compatible APIs. To use alternative providers:
+Works with OpenAI-compatible APIs:
 
 ```bash
-# For Azure OpenAI
+# Azure OpenAI
 CODING_AGENT_OPENAI_API_BASE=https://your-resource.openai.azure.com/
 CODING_AGENT_MODEL_NAME=your-deployment-name
 
-# For other providers (e.g., Together, Anyscale)
+# Other providers (Together, Anyscale, etc.)
 CODING_AGENT_OPENAI_API_BASE=https://api.together.xyz/v1
 CODING_AGENT_MODEL_NAME=meta-llama/Llama-3-70b-chat-hf
 ```
 
-## Troubleshooting
-
-### Common Issues
-
-**API Key Error**
-```
-Error: OpenAI API key not set
-```
-Solution: Ensure `CODING_AGENT_OPENAI_API_KEY` is set in `.env`
-
-**Model Not Found**
-```
-Error: Model xyz not found
-```
-Solution: Verify model name is correct for your API provider
-
-**Permission Errors**
-```
-Error: Permission denied
-```
-Solution: Ensure the agent has write permissions in the project directory
-
-## License
-
-MIT License - see LICENSE file for details
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-## Citation
-
-If you use this agent in your research, please cite:
-
-```bibtex
-@software{coding_agent,
-  title = {Coding Agent: Professional CLI-based AI Coding Assistant},
-  author = {Your Name},
-  year = {2024},
-  url = {https://github.com/yourusername/coding-agent}
-}
-```
-
-## Acknowledgments
-
-- Built with [LangGraph](https://github.com/langchain-ai/langgraph)
-- Evaluated on [SWE-bench](https://www.swebench.com/)
