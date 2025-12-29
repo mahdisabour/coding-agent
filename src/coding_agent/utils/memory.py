@@ -21,10 +21,6 @@ class ConversationTurn:
     timestamp: datetime
     user_message: str
     agent_response: str
-    plan: str | None
-    verification_passed: bool
-    iterations: int
-    errors: list[str]
     input_tokens: int
     output_tokens: int
     cost: float
@@ -47,10 +43,6 @@ class ConversationMemory:
         self,
         user_message: str,
         agent_response: str,
-        plan: str | None,
-        verification_passed: bool,
-        iterations: int,
-        errors: list[str],
         input_tokens: int,
         output_tokens: int,
         cost: float,
@@ -60,10 +52,6 @@ class ConversationMemory:
         Args:
             user_message: User's input
             agent_response: Agent's response
-            plan: Execution plan
-            verification_passed: Whether verification passed
-            iterations: Number of iterations
-            errors: List of errors encountered
             input_tokens: Input token count
             output_tokens: Output token count
             cost: Estimated cost
@@ -76,10 +64,6 @@ class ConversationMemory:
             timestamp=datetime.now(),
             user_message=user_message,
             agent_response=agent_response,
-            plan=plan,
-            verification_passed=verification_passed,
-            iterations=iterations,
-            errors=errors,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cost=cost,
@@ -100,14 +84,7 @@ class ConversationMemory:
         messages = []
         for turn in recent_turns:
             messages.append(HumanMessage(content=turn.user_message))
-
-            # Include plan and response
-            response_content = ""
-            if turn.plan:
-                response_content += f"Plan: {turn.plan}\n\n"
-            response_content += f"Response: {turn.agent_response}"
-
-            messages.append(AIMessage(content=response_content))
+            messages.append(AIMessage(content=turn.agent_response))
 
         return messages
 
@@ -129,9 +106,8 @@ class ConversationMemory:
         ]
 
         for turn in recent_turns:
-            status = "✓" if turn.verification_passed else "✗"
             summary_parts.append(
-                f"\nTurn {turn.turn_number} [{status}]: {turn.user_message[:100]}..."
+                f"\nTurn {turn.turn_number}: {turn.user_message[:100]}..."
             )
 
         if self._recent_files:
@@ -195,28 +171,24 @@ class ConversationMemory:
         if not self._turns:
             return {
                 "total_turns": 0,
+                "total_input_tokens": 0,
+                "total_output_tokens": 0,
                 "total_tokens": 0,
                 "total_cost": 0.0,
-                "success_rate": 0.0,
+                "avg_cost_per_turn": 0.0,
             }
 
         total_input = sum(t.input_tokens for t in self._turns)
         total_output = sum(t.output_tokens for t in self._turns)
         total_cost = sum(t.cost for t in self._turns)
-        successful = sum(1 for t in self._turns if t.verification_passed)
 
         return {
             "total_turns": len(self._turns),
-            "successful_turns": successful,
-            "failed_turns": len(self._turns) - successful,
-            "success_rate": successful / len(self._turns) if self._turns else 0.0,
             "total_input_tokens": total_input,
             "total_output_tokens": total_output,
             "total_tokens": total_input + total_output,
             "total_cost": total_cost,
             "avg_cost_per_turn": total_cost / len(self._turns) if self._turns else 0.0,
-            "total_iterations": sum(t.iterations for t in self._turns),
-            "total_errors": sum(len(t.errors) for t in self._turns),
         }
 
     def save_session(self, output_path: Path | None = None) -> Path:
@@ -245,10 +217,6 @@ class ConversationMemory:
                     "timestamp": t.timestamp.isoformat(),
                     "user_message": t.user_message,
                     "agent_response": t.agent_response,
-                    "plan": t.plan,
-                    "verification_passed": t.verification_passed,
-                    "iterations": t.iterations,
-                    "errors": t.errors,
                     "input_tokens": t.input_tokens,
                     "output_tokens": t.output_tokens,
                     "cost": t.cost,
@@ -290,10 +258,6 @@ class ConversationMemory:
                 timestamp=datetime.fromisoformat(turn_data["timestamp"]),
                 user_message=turn_data["user_message"],
                 agent_response=turn_data["agent_response"],
-                plan=turn_data.get("plan"),
-                verification_passed=turn_data["verification_passed"],
-                iterations=turn_data["iterations"],
-                errors=turn_data["errors"],
                 input_tokens=turn_data["input_tokens"],
                 output_tokens=turn_data["output_tokens"],
                 cost=turn_data["cost"],

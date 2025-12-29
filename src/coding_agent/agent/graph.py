@@ -1,130 +1,209 @@
 """LangGraph workflow for the coding agent."""
 
 import logging
-from typing import Literal
 
-from langgraph.graph import END, StateGraph
+from langchain.agents import create_agent
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
 
-from coding_agent.agent.nodes import (
-    executor_node,
-    planner_node,
-    reflector_node,
-    verifier_node,
-)
+from coding_agent.agent.prompts import get_system_prompt
 from coding_agent.agent.state import AgentState
 from coding_agent.config import get_settings
-from coding_agent.utils.usage_tracker import UsageTracker
+from coding_agent.tools import (
+    create_file,
+    list_directory,
+    read_file,
+    run_command,
+    search_code,
+    search_files,
+    search_symbols,
+    update_file,
+)
+
 
 logger = logging.getLogger(__name__)
 
 
-def should_continue(state: AgentState) -> Literal["plan", "execute", "verify", "reflect", "end"]:
-    """Determine the next node based on state.
-
-    Args:
-        state: Current agent state
-
-    Returns:
-        Name of the next node to execute
-    """
-    return state.get("next_node", "end")
-
-
-def create_agent_graph(usage_tracker: UsageTracker | None = None) -> StateGraph:
-    """Create the LangGraph workflow for the coding agent.
-
-    The workflow follows this pattern:
-    1. Plan: Analyze task and create execution plan
-    2. Execute: Use tools to implement the plan
-    3. Verify: Check if the solution is correct
-    4. Reflect: (Optional) If failed, analyze and retry
-    5. End: Finish execution
-
-    Args:
-        usage_tracker: Optional usage tracker for monitoring token usage
-
-    Returns:
-        Compiled StateGraph workflow
-    """
+def _create_llm() -> ChatOpenAI:
     settings = get_settings()
-
-    # Create the graph
-    workflow = StateGraph(AgentState)
-
-    # Add nodes
-    workflow.add_node("plan", lambda state: planner_node(state, usage_tracker))
-    workflow.add_node("execute", lambda state: executor_node(state, usage_tracker))
-    workflow.add_node("verify", lambda state: verifier_node(state, usage_tracker))
-
-    if settings.enable_reflection:
-        workflow.add_node("reflect", lambda state: reflector_node(state, usage_tracker))
-
-    # Set entry point
-    workflow.set_entry_point("plan")
-
-    # Add conditional edges based on state
-    workflow.add_conditional_edges(
-        "plan",
-        should_continue,
-        {
-            "execute": "execute",
-            "end": END,
-        },
+    return ChatOpenAI(
+        model=settings.model_name,
+        temperature=settings.temperature,
+        max_tokens=settings.max_tokens,
+        openai_api_key=settings.openai_api_key,
+        openai_api_base=settings.openai_api_base,
     )
 
-    workflow.add_conditional_edges(
-        "execute",
-        should_continue,
-        {
-            "verify": "verify",
-            "end": END,
-        },
+
+def create_agent_graph_with_project_root(project_root: str):
+    """Create and compile the agent graph with tools bound to project root.
+
+    Args:
+        project_root: Root directory of the project
+
+    Returns:
+        Compiled agent graph
+    """
+    llm_client = _create_llm()
+
+    # Get tools with project_root bound
+    tools = _create_tools_with_project_root(project_root)
+
+    # Create the agent with tools and system prompt
+    coding_agent = create_agent(
+        model=llm_client,
+        tools=tools,
+        state_schema=AgentState,
+        system_prompt=SystemMessage(
+            content=[
+                {
+                    "type": "text",
+                    "text": get_system_prompt(),
+                }
+            ]
+        ),
     )
 
-    if settings.enable_reflection:
-        workflow.add_conditional_edges(
-            "verify",
-            should_continue,
-            {
-                "reflect": "reflect",
-                "plan": "plan",
-                "end": END,
-            },
-        )
+    return coding_agent
 
-        workflow.add_conditional_edges(
-            "reflect",
-            should_continue,
-            {
-                "plan": "plan",
-                "end": END,
-            },
-        )
-    else:
-        workflow.add_conditional_edges(
-            "verify",
-            should_continue,
-            {
-                "plan": "plan",
-                "end": END,
-            },
-        )
 
-    # Compile the graph
-    return workflow.compile()
+
+def _create_tools_with_project_root(project_root: str):
+    """Create tools bound to a specific project root.
+
+    Args:
+        project_root: Root directory of the project
+
+    Returns:
+        List of tools with project_root bound
+    """
+    from langchain_core.tools import tool
+
+    # Create wrapper tools with project_root bound
+    @tool
+    def read_file_bound(file_path: str) -> str:
+        """Read the contents of a file.
+
+        Args:
+            file_path: Path to the file relative to project root
+
+        Returns:
+            File contents as a string
+        """
+        return read_file.invoke({"file_path": file_path, "project_root": project_root})
+
+    @tool
+    def create_file_bound(file_path: str, content: str) -> str:
+        """Create a new file with the given content.
+
+        Args:
+            file_path: Path to the file relative to project root
+            content: Content to write to the file
+
+        Returns:
+            Success or error message
+        """
+        return create_file.invoke({"file_path": file_path, "content": content, "project_root": project_root})
+
+    @tool
+    def update_file_bound(file_path: str, content: str) -> str:
+        """Update an existing file with new content.
+
+        Args:
+            file_path: Path to the file relative to project root
+            content: New content for the file
+
+        Returns:
+            Success or error message
+        """
+        return update_file.invoke({"file_path": file_path, "content": content, "project_root": project_root})
+
+    @tool
+    def list_directory_bound(dir_path: str = ".") -> str:
+        """List contents of a directory.
+
+        Args:
+            dir_path: Directory path relative to project root
+
+        Returns:
+            Directory listing
+        """
+        return list_directory.invoke({"dir_path": dir_path, "project_root": project_root})
+
+    @tool
+    def search_files_bound(pattern: str) -> str:
+        """Search for files matching a pattern.
+
+        Args:
+            pattern: Glob pattern to match files
+
+        Returns:
+            List of matching file paths
+        """
+        return search_files.invoke({"pattern": pattern, "project_root": project_root})
+
+    @tool
+    def search_code_bound(query: str, file_pattern: str = "**/*.py") -> str:
+        """Search for code matching a query in files.
+
+        Args:
+            query: Regular expression or plain text to search for
+            file_pattern: Glob pattern for files to search (default: all Python files)
+
+        Returns:
+            Matching lines with file paths and line numbers
+        """
+        return search_code.invoke({"query": query, "file_pattern": file_pattern, "project_root": project_root})
+
+    @tool
+    def search_symbols_bound(symbol_name: str, symbol_type: str = "any") -> str:
+        """Search for symbol definitions (functions, classes, etc.) in Python files.
+
+        Args:
+            symbol_name: Name of the symbol to find
+            symbol_type: Type of symbol: 'function', 'class', 'any'
+
+        Returns:
+            Locations where the symbol is defined
+        """
+        return search_symbols.invoke({"symbol_name": symbol_name, "symbol_type": symbol_type, "project_root": project_root})
+
+    @tool
+    def run_command_bound(command: str, timeout: int = 60) -> str:
+        """Execute a shell command in the project directory.
+
+        Args:
+            command: Shell command to execute
+            timeout: Command timeout in seconds
+
+        Returns:
+            Command output (stdout and stderr combined)
+        """
+        return run_command.invoke({"command": command, "project_root": project_root, "timeout": timeout})
+
+    return [
+        read_file_bound,
+        create_file_bound,
+        update_file_bound,
+        list_directory_bound,
+        search_files_bound,
+        search_code_bound,
+        search_symbols_bound,
+        run_command_bound,
+    ]
 
 
 async def run_agent(
     task: str,
     project_root: str,
-    usage_tracker: UsageTracker | None = None,
+    previous_messages: list | None = None,
 ) -> AgentState:
     """Run the agent on a given task.
 
     Args:
         task: Description of the task to solve
         project_root: Root directory of the project
-        usage_tracker: Optional usage tracker
+        previous_messages: Optional list of previous conversation messages for context
 
     Returns:
         Final agent state
@@ -132,28 +211,51 @@ async def run_agent(
     logger.info(f"Starting agent for task: {task}")
     logger.info(f"Project root: {project_root}")
 
-    # Create the graph
-    graph = create_agent_graph(usage_tracker)
+    # Create the graph with tools bound to project_root
+    graph = create_agent_graph_with_project_root(project_root)
 
-    # Initialize state
+    # Build message list with conversation history
+    messages = []
+    if previous_messages:
+        messages.extend(previous_messages)
+        logger.info(f"Including {len(previous_messages)} previous messages in context")
+
+    # Add current user message
+    messages.append(HumanMessage(content=task))
+
+    # Initialize state with conversation history
     initial_state: AgentState = {
-        "messages": [],
+        "messages": messages,
         "task": task,
         "project_root": project_root,
-        "plan": None,
-        "execution_results": [],
-        "verification_passed": False,
-        "reflection": None,
-        "iteration": 0,
-        "next_node": "plan",
-        "errors": [],
         "total_input_tokens": 0,
         "total_output_tokens": 0,
-        "node_usage": {},
     }
 
     # Run the graph
     final_state = await graph.ainvoke(initial_state)
 
+    # Extract token usage from LLM response metadata
+    messages = final_state.get("messages", [])
+    total_input = 0
+    total_output = 0
+
+    for msg in messages:
+        # Check for usage_metadata (newer format)
+        if hasattr(msg, "usage_metadata") and msg.usage_metadata:
+            total_input += msg.usage_metadata.get("input_tokens", 0)
+            total_output += msg.usage_metadata.get("output_tokens", 0)
+        # Fallback to response_metadata (older format)
+        elif hasattr(msg, "response_metadata") and msg.response_metadata:
+            usage = msg.response_metadata.get("token_usage", {})
+            total_input += usage.get("prompt_tokens", 0)
+            total_output += usage.get("completion_tokens", 0)
+
+    # Update state with token counts
+    final_state["total_input_tokens"] = total_input
+    final_state["total_output_tokens"] = total_output
+
     logger.info("Agent execution completed")
+    logger.info(f"Token usage - Input: {total_input}, Output: {total_output}")
+
     return final_state

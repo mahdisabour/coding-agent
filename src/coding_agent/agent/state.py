@@ -6,7 +6,7 @@ from langgraph.graph import add_messages
 from langchain_core.messages import BaseMessage
 
 
-class AgentState(TypedDict):
+class AgentState(TypedDict, total=False):
     """State for the coding agent."""
 
     # Messages in the conversation
@@ -18,28 +18,6 @@ class AgentState(TypedDict):
     # Project root path
     project_root: str
 
-    # Current plan
-    plan: str | None
-
-    # Execution results
-    execution_results: list[dict]
-
-    # Verification status
-    verification_passed: bool
-
-    # Reflection notes
-    reflection: str | None
-
-    # Iteration counter
-    iteration: int
-
-    # Next node to execute
-    next_node: Literal["plan", "execute", "verify", "reflect", "end"] | None
-
-    # Error tracking
-    errors: list[str]
-
-    # Usage tracking
+    # Usage tracking (accumulated throughout the session)
     total_input_tokens: int
     total_output_tokens: int
-    node_usage: dict[str, dict[str, int]]  # node_name -> {input_tokens, output_tokens}
