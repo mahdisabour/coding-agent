@@ -1,14 +1,20 @@
 """Interactive session management for multi-turn conversations."""
 
 import logging
+import asyncio
 from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
+from rich.prompt import Prompt
 
 from coding_agent.agent.graph import run_agent
 from coding_agent.config import get_settings
 from coding_agent.utils.memory import ConversationMemory
+from langgraph.checkpoint.memory import MemorySaver
+from uuid import uuid4
+from langchain_core.messages import HumanMessage, ToolMessage
+from coding_agent.agent.graph import create_agent_graph_with_project_root, SAFE_TOOLS
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -32,6 +38,27 @@ class InteractiveSession:
         self.memory = memory or ConversationMemory(project_root=project_root)
         self.settings = get_settings()
 
+        self.checkpointer = MemorySaver()
+        self.thread_id = str(uuid4())
+
+        self.graph = create_agent_graph_with_project_root(
+            project_root, 
+            checkpointer=self.checkpointer
+        )
+
+    async def _get_user_approval(self, tool_name: str, tool_args: dict) -> str:
+        """Helper to ask the user for permission."""
+        console.print(f"\n[bold yellow]⚠️  The Agent wants to run: {tool_name}[/bold yellow]")
+        console.print(f"Args: {tool_args}")
+        
+        response = await asyncio.to_thread(
+            Prompt.ask, 
+            "Allow this action?", 
+            choices=["y", "n"], 
+            default="y"
+        )
+        return "yes" if response == "y" else "no"
+
     async def process_turn(self, user_message: str) -> dict:
         """Process a single conversation turn.
 
@@ -43,20 +70,111 @@ class InteractiveSession:
         """
         logger.info(f"Processing turn {len(self.memory._turns) + 1}")
 
-        # Get conversation history from memory
-        context_messages = self.memory.get_context_messages()
+        config = {"configurable": {"thread_id": self.thread_id}}
 
-        # Run the agent with conversation history
-        final_state = await run_agent(
-            task=user_message,
-            project_root=self.project_root,
-            previous_messages=context_messages,
-        )
+        snapshot = self.graph.get_state(config)
+        
+        messages_to_send = []
+        
+        if len(snapshot.values) > 0:
+            # CASE A: WARM START (Graph has memory)
+            messages_to_send = [HumanMessage(content=user_message)]
+            inputs = {"messages": messages_to_send, "task": user_message, "project_root": self.project_root}
+            logger.info("Resuming existing LangGraph thread")
+            
+        else:
+            # CASE B: COLD START (Graph is empty)
+            context_messages = self.memory.get_context_messages()
+            messages_to_send = context_messages + [HumanMessage(content=user_message)]
+            inputs = {"messages": messages_to_send, "task": user_message, "project_root": self.project_root,
+                       "total_input_tokens": 0, "total_output_tokens": 0,}
+            logger.info(f"Initializing LangGraph thread with {len(context_messages)} past messages")
+
+        # We use astream to advance the graph until it finishes OR hits an interrupt
+        async for event in self.graph.astream(inputs, config, stream_mode="values"):
+            pass
+
+        # THE INTERRUPT LOOP (Handle pauses for Tools)
+        while True:
+            snapshot = self.graph.get_state(config)
+            
+            if not snapshot.next:
+                break
+            
+            last_message = snapshot.values["messages"][-1]
+            
+            if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
+                async for event in self.graph.astream(None, config, stream_mode="values"):
+                    pass
+                continue
+
+            tool_call = last_message.tool_calls[0]
+            tool_name = tool_call["name"]
+            tool_args = tool_call["args"]
+
+            if tool_name in SAFE_TOOLS:
+                console.print(f"[dim]Auto-approving safe tool: {tool_name}[/dim]")
+                
+                async for event in self.graph.astream(None, config, stream_mode="values"):
+                    pass
+            
+            else:
+                decision = await self._get_user_approval(tool_name, tool_args)
+                
+                if decision == "yes":
+                    console.print("[green]Approved.[/green]")
+                    # RESUME standard execution
+                    async for event in self.graph.astream(None, config, stream_mode="values"):
+                        pass
+                
+                else:
+                    console.print("[red]Rejected.[/red]")
+                    
+                    # REJECT: We must "fake" a tool failure to the agent.
+                    rejection_message = ToolMessage(
+                        tool_call_id=tool_call["id"],
+                        content=f"Error: User blocked the execution of {tool_name}."
+                    )
+                    
+                    # We inject this message into the state using update_state
+                    self.graph.update_state(
+                        config, 
+                        {"messages": [rejection_message]}, 
+                        as_node="tools"
+                    )
+                    
+                    # RESUME: The agent will now see the error message and try again
+                    async for event in self.graph.astream(None, config, stream_mode="values"):
+                        pass
+        
+        final_state = self.graph.get_state(config).values
 
         # Extract results
         agent_response = self._extract_response(final_state)
 
         # Get tokens from state
+        messages = final_state.get("messages", [])
+        total_input = 0
+        total_output = 0
+
+        for msg in messages:
+            # Check for usage_metadata (newer format)
+            if hasattr(msg, "usage_metadata") and msg.usage_metadata:
+                total_input += msg.usage_metadata.get("input_tokens", 0)
+                total_output += msg.usage_metadata.get("output_tokens", 0)
+            # Fallback to response_metadata (older format)
+            elif hasattr(msg, "response_metadata") and msg.response_metadata:
+                usage = msg.response_metadata.get("token_usage", {})
+                total_input += usage.get("prompt_tokens", 0)
+                total_output += usage.get("completion_tokens", 0)
+
+        # Update state with token counts
+        final_state["total_input_tokens"] = total_input
+        final_state["total_output_tokens"] = total_output
+
+        logger.info("Agent execution completed")
+        logger.info(f"Token usage - Input: {total_input}, Output: {total_output}")
+
         turn_input_tokens = final_state.get("total_input_tokens", 0)
         turn_output_tokens = final_state.get("total_output_tokens", 0)
 

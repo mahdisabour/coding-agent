@@ -14,6 +14,7 @@ Available tools:
 - read_file: Read the contents of a file
 - create_file: Create a new file with specified content
 - update_file: Update an existing file (modify, add, or remove content)
+- replace_in_file: Replace a specific snippet of text in a file
 - list_directory: List files and directories in a path
 - search_files: Search for files by name pattern
 - search_code: Search for code content using regex

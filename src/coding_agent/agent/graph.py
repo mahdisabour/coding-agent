@@ -4,6 +4,7 @@ import logging
 
 from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain.agents.middleware import SummarizationMiddleware
 from langchain_openai import ChatOpenAI
 
 from coding_agent.agent.prompts import get_system_prompt
@@ -18,8 +19,16 @@ from coding_agent.tools import (
     search_files,
     search_symbols,
     update_file,
+    replace_in_file,
 )
 
+SAFE_TOOLS = {
+    "read_file_bound",
+    "list_directory_bound",
+    "search_files_bound",
+    "search_code_bound",
+    "search_symbols_bound",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +44,7 @@ def _create_llm() -> ChatOpenAI:
     )
 
 
-def create_agent_graph_with_project_root(project_root: str):
+def create_agent_graph_with_project_root(project_root: str, checkpointer=None):
     """Create and compile the agent graph with tools bound to project root.
 
     Args:
@@ -50,6 +59,12 @@ def create_agent_graph_with_project_root(project_root: str):
     tools = _create_tools_with_project_root(project_root)
 
     # Create the agent with tools and system prompt
+    summ = SummarizationMiddleware(
+        model=llm_client,
+        trigger=("tokens", 8000),
+        keep=("messages", 10),
+    )
+
     coding_agent = create_agent(
         model=llm_client,
         tools=tools,
@@ -62,6 +77,9 @@ def create_agent_graph_with_project_root(project_root: str):
                 }
             ]
         ),
+        middleware=[summ],
+        checkpointer=checkpointer,
+        interrupt_before=["tools"] if checkpointer else [],
     )
 
     return coding_agent
@@ -117,6 +135,21 @@ def _create_tools_with_project_root(project_root: str):
             Success or error message
         """
         return update_file.invoke({"file_path": file_path, "content": content, "project_root": project_root})
+    
+    @tool
+    def replace_in_file_bound(file_path: str, search_text: str, replace_text: str) -> str:
+        """Replace a specific snippet of text in a file with new text.
+            Use this instead of overwriting the whole file for small changes.
+    
+        Args:
+            file_path: Path to the file relative to project root
+            search_text: The exact text snippet to look for and replace
+            replace_text: The new text to insert in its place
+            
+        Returns:
+            Success or error message
+        """
+        return replace_in_file.invoke({"file_path": file_path, "search_text": search_text, "replace_text": replace_text, "project_root": project_root})
 
     @tool
     def list_directory_bound(dir_path: str = ".") -> str:
@@ -185,6 +218,7 @@ def _create_tools_with_project_root(project_root: str):
         read_file_bound,
         create_file_bound,
         update_file_bound,
+        replace_in_file_bound,
         list_directory_bound,
         search_files_bound,
         search_code_bound,

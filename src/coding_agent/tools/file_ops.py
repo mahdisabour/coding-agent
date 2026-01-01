@@ -82,6 +82,52 @@ def update_file(file_path: str, content: str, project_root: str = ".") -> str:
         logger.error(f"Error updating file {file_path}: {e}")
         return f"Error updating file: {str(e)}"
 
+@tool
+def replace_in_file(file_path: str, search_text: str, replace_text: str, project_root: str = ".") -> str:
+    """
+    Replace a specific snippet of text in a file with new text.
+    Use this instead of overwriting the whole file for small changes.
+    
+    Args:
+        file_path: Path to the file relative to project root
+        search_text: The exact text snippet to look for and replace
+        replace_text: The new text to insert in its place
+        project_root: Root directory of the project
+        
+    Returns:
+        Success or error message
+    """
+    try:
+        full_path = Path(project_root) / file_path
+        if not full_path.exists():
+            return f"Error: File {file_path} does not exist"
+
+        content = full_path.read_text(encoding="utf-8")
+        
+        if search_text not in content:
+            return (
+                f"Error: Could not find the exact text in {file_path}. "
+                "Check for whitespace or indentation differences. "
+                "Use read_file to verify the current content."
+            )
+            
+        count = content.count(search_text)
+        if count > 1:
+            return (
+                f"Error: Found {count} occurrences of the search text in {file_path}. "
+                "Please provide a more unique 'search_text' snippet that includes "
+                "surrounding context lines to identify the specific location."
+            )
+            
+        new_content = content.replace(search_text, replace_text)
+        full_path.write_text(new_content, encoding="utf-8")
+        
+        return f"Successfully replaced text in {file_path}"
+        
+    except Exception as e:
+        logger.error(f"Error replacing text in {file_path}: {e}")
+        return f"Error updating file: {str(e)}"
+
 
 @tool
 def list_directory(dir_path: str = ".", project_root: str = ".") -> str:
