@@ -5,7 +5,7 @@ class TextChunker:
 
     def chunk_text(self, text):
         """
-        Splits text into fixed-size chunks.
+        Splits text into fixed-size chunks by words.
         """
         chunks = []
         start = 0

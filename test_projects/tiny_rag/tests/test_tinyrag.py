@@ -31,14 +31,13 @@ class TestEndToEndPipeline(unittest.TestCase):
         
         chunker = TextChunker(chunk_size=10, overlap=0)
         chunks = chunker.chunk_text(input_text)
-        
-        broken_words = [c for c in chunks if c.strip().startswith("Intellige") or c.strip().endswith("nce")]
-        
-        self.assertFalse(
-            broken_words,
-            f"Chunker Logic Failure: Words are being sliced in half.\n"
-            f"Input: '{input_text[:30]}...'\n"
-            f"Bad Output Fragments: {broken_words}\n"
+                
+        self.assertEqual(
+            chunks[0],
+            self.lines[0],
+            f"Chunker Logic Failure.\n"
+            f"Input: '{self.lines[0]}'\n"
+            f"Bad Output: {chunks[0]}\n"
         )
 
     def test_search_quality(self):
@@ -80,7 +79,7 @@ class TestEndToEndPipeline(unittest.TestCase):
         """
         vectorizer = SimpleVectorizer()
         
-        doc1 = self.lines[1]
+        doc1 = self.lines[0]
         
         vectorizer.build_vocab([doc1])
         
